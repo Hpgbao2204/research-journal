@@ -1,0 +1,285 @@
+// PaperScout AI — Prisma schema
+// Data-integrity principle: every venue (Journal, Conference, SpecialIssue) and
+// every Paper is traceable to a DataSource and carries provenance fields
+// (sourceUrl, officialUrl, dataSourceId, verificationStatus, lastCheckedAt).
+// Sample/seed records are labeled UNVERIFIED_MOCK and must never be presented
+// as verified data.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum VerificationStatus {
+  UNVERIFIED_MOCK
+  IMPORTED
+  VERIFIED
+}
+
+/// Lifecycle status for calls for papers / events.
+enum VenueLifecycleStatus {
+  OPEN
+  CLOSED
+  UPCOMING
+}
+
+enum ConferenceMode {
+  ONLINE
+  OFFLINE
+  HYBRID
+}
+
+enum ConferenceRanking {
+  CORE_A_STAR
+  CORE_A
+  CORE_B
+  CORE_C
+  OTHER
+}
+
+enum Quartile {
+  Q1
+  Q2
+  Q3
+  Q4
+}
+
+enum VenueType {
+  JOURNAL
+  CONFERENCE
+  SPECIAL_ISSUE
+}
+
+enum RecommendationMethod {
+  AI
+  RULE_BASED
+}
+
+// ---------------------------------------------------------------------------
+// Provenance / classification
+// ---------------------------------------------------------------------------
+
+model DataSource {
+  id          String   @id @default(cuid())
+  name        String
+  reliability String // e.g. "unverified-sample", "imported-csv", "imported-json"
+  description String?
+  sourceUrl   String? // canonical URL of the source itself, when applicable
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  journals      Journal[]
+  conferences   Conference[]
+  specialIssues SpecialIssue[]
+  papers        Paper[]
+}
+
+model Field {
+  id            String         @id @default(cuid())
+  name          String         @unique
+  description   String?
+  journals      Journal[]
+  conferences   Conference[]
+  papers        Paper[]
+  specialIssues SpecialIssue[]
+}
+
+model Keyword {
+  id            String         @id @default(cuid())
+  term          String         @unique
+  papers        Paper[]        @relation("PaperKeywords")
+  journals      Journal[]      @relation("JournalKeywords")
+  conferences   Conference[]   @relation("ConferenceKeywords")
+  specialIssues SpecialIssue[] @relation("SpecialIssueKeywords")
+}
+
+// ---------------------------------------------------------------------------
+// Venues
+// ---------------------------------------------------------------------------
+
+model Journal {
+  id                 String    @id @default(cuid())
+  name               String
+  publisher          String?
+  issn               String?
+  eissn              String?
+  fieldId            String?
+  field              Field?    @relation(fields: [fieldId], references: [id])
+  scope              String?
+  indexing           String[]
+  quartile           Quartile?
+  impactFactor       Float?
+  apc                Int? // amount; currency in metadata
+  openAccess         Boolean?
+  submissionUrl      String?
+  submissionDeadline DateTime?
+  country            String?
+  notes              String?
+
+  // provenance
+  sourceUrl          String
+  officialUrl        String
+  dataSourceId       String
+  dataSource         DataSource         @relation(fields: [dataSourceId], references: [id])
+  verificationStatus VerificationStatus @default(UNVERIFIED_MOCK)
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  lastCheckedAt      DateTime           @default(now())
+
+  keywords      Keyword[]      @relation("JournalKeywords")
+  specialIssues SpecialIssue[]
+
+  @@unique([dataSourceId, sourceUrl])
+  @@index([fieldId])
+}
+
+model SpecialIssue {
+  id                  String               @id @default(cuid())
+  title               String
+  journalId           String?
+  journal             Journal?             @relation(fields: [journalId], references: [id])
+  publisher           String?
+  topicScope          String?
+  guestEditors        String?
+  fieldId             String?
+  field               Field?               @relation(fields: [fieldId], references: [id])
+  submissionDeadline  DateTime?
+  publicationTimeline String?
+  submissionUrl       String?
+  lifecycleStatus     VenueLifecycleStatus @default(UPCOMING)
+
+  // provenance
+  sourceUrl          String
+  officialUrl        String
+  dataSourceId       String
+  dataSource         DataSource         @relation(fields: [dataSourceId], references: [id])
+  verificationStatus VerificationStatus @default(UNVERIFIED_MOCK)
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  lastCheckedAt      DateTime           @default(now())
+
+  keywords Keyword[] @relation("SpecialIssueKeywords")
+
+  @@unique([dataSourceId, sourceUrl])
+  @@index([fieldId])
+  @@index([journalId])
+}
+
+model Conference {
+  id                 String                @id @default(cuid())
+  name               String
+  acronym            String?
+  fieldId            String?
+  field              Field?                @relation(fields: [fieldId], references: [id])
+  organizer          String?
+  location           String?
+  country            String?
+  mode               ConferenceMode?
+  submissionDeadline DateTime?
+  notificationDate   DateTime?
+  conferenceDate     DateTime?
+  ranking            ConferenceRanking?
+  indexing           String[]
+  cfpUrl             String?
+  lifecycleStatus    VenueLifecycleStatus  @default(UPCOMING)
+
+  // provenance
+  sourceUrl          String
+  officialUrl        String
+  dataSourceId       String
+  dataSource         DataSource         @relation(fields: [dataSourceId], references: [id])
+  verificationStatus VerificationStatus @default(UNVERIFIED_MOCK)
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  lastCheckedAt      DateTime           @default(now())
+
+  keywords Keyword[] @relation("ConferenceKeywords")
+
+  @@unique([dataSourceId, sourceUrl])
+  @@index([fieldId])
+}
+
+model Paper {
+  id        String  @id @default(cuid())
+  title     String
+  abstract  String?
+  authors   String?
+  fieldId   String?
+  field     Field?  @relation(fields: [fieldId], references: [id])
+  venueName String?
+  year      Int?
+  doi       String?
+
+  // provenance
+  sourceUrl          String
+  officialUrl        String?
+  dataSourceId       String
+  dataSource         DataSource         @relation(fields: [dataSourceId], references: [id])
+  verificationStatus VerificationStatus @default(UNVERIFIED_MOCK)
+  metadata           Json?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+  lastCheckedAt      DateTime           @default(now())
+
+  keywords Keyword[] @relation("PaperKeywords")
+
+  @@unique([dataSourceId, sourceUrl])
+  @@index([fieldId])
+}
+
+// ---------------------------------------------------------------------------
+// Recommendations
+// ---------------------------------------------------------------------------
+
+model RecommendationResult {
+  id                  String               @id @default(cuid())
+  inputTitle          String
+  inputAbstract       String
+  inputKeywords       String[]
+  inputField          String?
+  preferredVenueType  VenueType?
+  // extracted analysis
+  mainTopic           String?
+  subfield            String?
+  methodology         String?
+  contributionType    String?
+  extractedKeywords   String[]
+  suitableDisciplines String[]
+  suggestedAbstract   String?
+  suggestedTitle      String?
+  method              RecommendationMethod
+  saved               Boolean              @default(false)
+  createdAt           DateTime             @default(now())
+
+  items RecommendationItem[]
+}
+
+model RecommendationItem {
+  id                 String               @id @default(cuid())
+  resultId           String
+  result             RecommendationResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  venueType          VenueType
+  venueId            String
+  venueName          String
+  matchScore         Int // 0..100
+  reason             String
+  scopeAlignment     String?
+  submissionDeadline DateTime?
+  indexing           String[]
+  submissionUrl      String?
+  warnings           String[]
+  rank               Int
+
+  @@index([resultId])
+}
