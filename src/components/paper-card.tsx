@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { FileText, Download, ExternalLink, Quote, Check } from "lucide-react";
 import { DataSourceBadge } from "@/components/data-source-badge";
+import { SaveToggle } from "@/components/save-toggle";
 import { CITE_FORMATS, cite, googleScholarUrl, type CiteFormat } from "@/lib/cite";
 import type { PaperDTO } from "@/lib/dto";
 
@@ -82,7 +83,20 @@ export function PaperCard({ paper: p }: { paper: PaperDTO }) {
         </div>
       </div>
 
-      <DataSourceBadge dataSource={p.dataSource} isUnverified={p.isUnverified} />
+      <div className="flex items-center justify-between gap-2">
+        <DataSourceBadge dataSource={p.dataSource} isUnverified={p.isUnverified} />
+        <SaveToggle
+          item={{
+            key: `paper:${p.id}`,
+            kind: "paper",
+            id: p.id,
+            title: p.title,
+            subtitle: [p.venueName, p.year ? String(p.year) : null].filter(Boolean).join(" · "),
+            href: `/papers/${p.id}`,
+            url: p.doiUrl ?? p.openAccessUrl,
+          }}
+        />
+      </div>
     </div>
   );
 }

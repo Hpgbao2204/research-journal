@@ -2,21 +2,22 @@ import Link from "next/link";
 import { BookOpen, Globe, TrendingUp } from "lucide-react";
 import { QuartileBadge } from "@/components/quartile-badge";
 import { DataSourceBadge } from "@/components/data-source-badge";
+import { SaveToggle } from "@/components/save-toggle";
 import { Badge } from "@/components/ui/badge";
 import type { JournalDTO } from "@/lib/dto";
 
 /** Rich journal card used in search results and journal listings. */
 export function JournalCard({ journal: j }: { journal: JournalDTO }) {
   return (
-    <Link
-      href={`/journals/${j.id}`}
-      className="group flex h-full flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--primary)] hover:shadow-md"
-    >
+    <div className="group flex h-full flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm transition-all hover:border-[var(--primary)] hover:shadow-md">
       <div className="flex items-start justify-between gap-2">
-        <span className="flex items-center gap-2 font-semibold leading-snug text-[var(--foreground)] group-hover:text-[var(--primary)]">
+        <Link
+          href={`/journals/${j.id}`}
+          className="flex items-start gap-2 font-semibold leading-snug text-[var(--foreground)] hover:text-[var(--primary)]"
+        >
           <BookOpen className="mt-0.5 h-4 w-4 shrink-0 text-[var(--primary)]" />
           {j.name}
-        </span>
+        </Link>
         <QuartileBadge quartile={j.quartile} />
       </div>
 
@@ -48,7 +49,20 @@ export function JournalCard({ journal: j }: { journal: JournalDTO }) {
         ))}
       </div>
 
-      <DataSourceBadge dataSource={j.dataSource} isUnverified={j.isUnverified} />
-    </Link>
+      <div className="flex items-center justify-between gap-2">
+        <DataSourceBadge dataSource={j.dataSource} isUnverified={j.isUnverified} />
+        <SaveToggle
+          item={{
+            key: `journal:${j.id}`,
+            kind: "journal",
+            id: j.id,
+            title: j.name,
+            subtitle: [j.publisher, j.quartile].filter(Boolean).join(" · "),
+            href: `/journals/${j.id}`,
+            url: j.officialUrl,
+          }}
+        />
+      </div>
+    </div>
   );
 }

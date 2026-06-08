@@ -3,8 +3,9 @@ import Link from "next/link";
 const links = [
   { href: "/search", label: "Search" },
   { href: "/journals", label: "Journals" },
+  { href: "/compare", label: "Compare" },
   { href: "/conferences", label: "Conferences" },
-  { href: "/special-issues", label: "Special Issues" },
+  { href: "/library", label: "Library" },
   { href: "/saved", label: "Saved" },
 ];
 
