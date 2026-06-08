@@ -8,10 +8,10 @@ export function MockDataNotice() {
       role="note"
       className="rounded-[var(--radius)] border border-[var(--warning)] bg-[var(--warning-bg)] px-4 py-3 text-sm text-[var(--warning)]"
     >
-      <strong className="font-semibold">Sample data:</strong> All journals,
-      conferences, and special issues shown here are unverified mock data for
-      demonstration only. They are not verified against any authoritative source.
-      Always confirm details on the venue&apos;s official website before submitting.
+      <strong className="font-semibold">Data sources:</strong> Journals and
+      papers are live from OpenAlex (real data). Conferences and special issues
+      are unverified sample data for demonstration only. Always confirm details
+      on the venue&apos;s official website before submitting.
     </div>
   );
 }

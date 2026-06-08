@@ -52,8 +52,12 @@ async function runSearch(params: SearchParams): Promise<SearchResults> {
   // ---- Journals (live from OpenAlex) -------------------------------------
   let journals: SearchResults["journals"] = [];
   if (includesContent(params, "JOURNAL")) {
+    // OpenAlex has no Scopus/IEEE/... indexing flags, so fold the chosen
+    // indexing/publisher into the search query (e.g. IEEE -> IEEE journals)
+    // rather than filtering on data we don't have.
+    const journalQuery = [q, indexing].filter(Boolean).join(" ").trim() || undefined;
     journals = await openAlex.searchJournals({
-      q,
+      q: journalQuery,
       field: fieldName,
       openAccess: params.openAccess,
       country: params.country,
@@ -64,7 +68,6 @@ async function runSearch(params: SearchParams): Promise<SearchResults> {
     if (params.quartile) journals = journals.filter((j) => j.quartile === params.quartile);
     if (params.apcMin != null) journals = journals.filter((j) => j.apc != null && j.apc >= params.apcMin!);
     if (params.apcMax != null) journals = journals.filter((j) => j.apc != null && j.apc <= params.apcMax!);
-    if (indexing) journals = journals.filter((j) => j.indexing.includes(indexing));
   }
 
   // ---- Conferences -------------------------------------------------------
