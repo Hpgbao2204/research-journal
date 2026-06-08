@@ -6,10 +6,13 @@ special issues, then paste your **title + abstract** to get ranked venue
 recommendations with match scores, scope alignment, deadlines, warnings, and
 suggested improvements.
 
-> **MVP.** Journals and papers come live from the free **OpenAlex** API.
-> Conferences and special issues are clearly labelled **sample/mock data**
-> (they are not verified against an authoritative source). Nothing in the app
+> Journals, papers and quartiles come live from **OpenAlex** plus local
+> **Scimago** and **Web of Science** catalogues (real data). Conferences and
+> special issues are clearly labelled **sample/mock data**. Nothing in the app
 > fabricates verified venue information.
+
+> **Deploying or want the full local/online setup guide?** See
+> [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Tech stack
 
@@ -17,10 +20,12 @@ suggested improvements.
 - **Tailwind CSS v4** + **Shadcn UI**
 - **React Hook Form** + **Zod** (validation shared client/server)
 - **Prisma 7** + **PostgreSQL** (driver adapters). Local dev uses embedded
-  **PGlite** so no database install is required.
-- **OpenAlex** as the live journal/paper data source (no API key).
-- AI recommendation service (OpenAI-compatible, optional) with a deterministic
-  **rule-based fallback**.
+  **PGlite** so no database install is required; production uses real
+  PostgreSQL (e.g. Neon) — switch with one environment variable.
+- **OpenAlex** (live), **Scimago** (SJR/quartiles) and **Web of Science**
+  (SCIE/SSCI/AHCI/ESCI indexing) as journal data sources.
+- AI recommendation service (OpenAI-compatible — hosted **or** local Ollama,
+  optional) with a deterministic **rule-based fallback**.
 - **Vitest** + **fast-check** for property-based tests.
 
 ## What works today
@@ -57,20 +62,21 @@ DATABASE_URL="pglite://.pglite"
 
 ## Using a real PostgreSQL database
 
-Set `DATABASE_URL` to a PostgreSQL connection string, then run migrations and
-the seed:
+Set `DATABASE_URL` to a PostgreSQL connection string, create the schema, then
+optionally seed:
 
 ```bash
-# .env
-DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/paperscout?schema=public"
+# .env  (e.g. Neon — note sslmode)
+DATABASE_URL="postgresql://USER:PASSWORD@HOST/DB?sslmode=require"
 
-npx prisma migrate dev
-npx prisma db seed
+npm run db:push     # sync schema.prisma to the database (no migration files)
+npm run db:seed     # optional sample conferences / special issues / papers
 npm run dev
 ```
 
 The app automatically uses the `pg` driver adapter for `postgresql://` URLs and
-PGlite for `pglite://` URLs.
+PGlite for `pglite://` URLs. For a full online (Neon + Vercel) walkthrough see
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
 
 ## Configuring AI (optional)
 
@@ -95,7 +101,8 @@ The result page shows whether a recommendation was produced by **AI** or the
 | `npm run typecheck` | `tsc --noEmit` |
 | `npm test` | Run Vitest (incl. property-based tests) |
 | `npm run db:generate` | `prisma generate` |
-| `npm run db:migrate` | `prisma migrate dev` (real PostgreSQL) |
+| `npm run db:push` | Sync schema to a real PostgreSQL DB (no migration files) |
+| `npm run db:migrate` | `prisma migrate dev` (versioned migrations) |
 | `npm run db:seed` | Seed the database |
 
 ## Project structure
@@ -111,7 +118,7 @@ src/
     providers/openalex  live OpenAlex journal/paper integration
     schemas/            shared Zod schemas
     services/           search, venue, recommendation, admin
-      recommendation/   ai-client, candidates, extract, fallback, prompt
+      recommendation/   ai-client, ai-analyze, candidates, extract, fallback, semantic
     ingestion/          CSV/JSON import, normalize, dedupe, crawler stub
     http/               typed errors, logger, handleRoute
   instrumentation.ts    PGlite schema + seed on server start
@@ -142,10 +149,10 @@ tests/                  fast-check property tests
 
 ## Roadmap / next steps
 
+- Authentication around saved recommendations and a per-user library.
+- Submission tracker (where a paper was submitted and its status).
 - Real conference & CFP data (e.g. an authorized feed) — OpenAlex has no CFPs.
-- Journal quartiles/SJR ranks via a Scimago CSV import (no public API).
-- Authentication around the admin area and saved recommendations.
-- Expand property/integration test coverage to all 23 design properties.
+- Surface CiteScore from the combined ranking dataset on journal detail pages.
 
 ## License
 
