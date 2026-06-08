@@ -27,8 +27,20 @@ import {
   VenueLifecycleStatus,
   VerificationStatus,
 } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 
-const prisma = new PrismaClient();
+// Prisma 7 constructs the client with a driver adapter; the connection URL is
+// read from DATABASE_URL (see prisma.config.ts / .env).
+const connectionString = process.env.DATABASE_URL;
+if (!connectionString) {
+  throw new Error(
+    "DATABASE_URL is not set. Copy .env.example to .env and set the PostgreSQL connection string before seeding.",
+  );
+}
+
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString }),
+});
 
 // Stable id so the sample DataSource is upserted (not duplicated) across runs.
 const SAMPLE_DATA_SOURCE_ID = "ds-sample-mock";
