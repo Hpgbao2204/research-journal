@@ -1,48 +1,26 @@
 @import "tailwindcss";
 
 /*
- * PaperScout AI theme — a calm, academic palette designed to be easy on the
- * eyes: soft off-white background, muted slate text, restrained indigo/teal
- * accents, and amber for unverified-data warnings. Dark mode mirrors the same
- * relationships with low-glare surfaces.
+ * PaperScout AI theme — light, calm, soft pastel-green palette.
+ * Light background with a faint green tint, white cards, a soft green primary,
+ * and amber reserved for unverified-data warnings. Easy on the eyes for long
+ * reading sessions.
  */
 
 :root {
-  --background: #f7f8fa;
-  --foreground: #1e293b;
+  --background: #f3f9f6;       /* faint pastel-green tint */
+  --foreground: #1f2d28;       /* deep green-grey text */
   --card: #ffffff;
-  --muted: #eef1f5;
-  --muted-foreground: #64748b;
-  --border: #e3e8ef;
-  --primary: #4f46e5;
-  /* indigo-600, slightly softened */
+  --muted: #e9f3ee;            /* soft green surface */
+  --muted-foreground: #5b6f66; /* muted green-grey */
+  --border: #d6e7df;           /* pastel green border */
+  --primary: #3aa687;          /* soft pastel green (white text passes AA) */
   --primary-foreground: #ffffff;
-  --accent: #0f766e;
-  /* teal-700 */
-  --warning: #b45309;
-  /* amber-700 */
-  --warning-bg: #fdf6e3;
-  --ring: #a5b4fc;
-  --radius: 0.625rem;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0f1419;
-    --foreground: #e6e9ef;
-    --card: #171c24;
-    --muted: #1d242e;
-    --muted-foreground: #94a3b8;
-    --border: #2a3340;
-    --primary: #818cf8;
-    /* lighter indigo for contrast on dark */
-    --primary-foreground: #0f1419;
-    --accent: #2dd4bf;
-    /* teal-400 */
-    --warning: #fbbf24;
-    --warning-bg: #2a2412;
-    --ring: #4f46e5;
-  }
+  --accent: #2f8f86;           /* teal-green accent for links */
+  --warning: #b45309;          /* amber-700 */
+  --warning-bg: #fdf3e3;
+  --ring: #8fd3bd;             /* light green focus ring */
+  --radius: 0.75rem;
 }
 
 @theme inline {

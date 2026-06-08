@@ -1,4 +1,5 @@
 import { logger } from "@/lib/http/logger";
+import { scimago } from "@/lib/providers/scimago";
 import type { JournalDTO, PaperDTO, DataSourceDTO } from "@/lib/dto";
 
 /**
@@ -96,28 +97,45 @@ function sourceToJournalDTO(s: OASource): JournalDTO {
   const id = shortId(s.id);
   const concepts = (s.topics ?? s.x_concepts ?? []).map((c) => c.display_name).filter(Boolean);
   const if2yr = s.summary_stats?.["2yr_mean_citedness"];
+
+  // Enrich with Scimago (SJR) by ISSN: real quartile, SJR score, H-index.
+  const sjr = scimago.lookup([s.issn_l, ...(s.issn ?? [])]);
+  const indexing = ["OpenAlex"];
+  if (sjr) indexing.unshift("Scopus"); // Scimago is built on Scopus coverage
+  const keywords = [...new Set([...(sjr?.categories ?? []), ...concepts])].slice(0, 12);
+
   return {
     id,
     name: s.display_name,
-    publisher: s.host_organization_name ?? null,
+    publisher: s.host_organization_name ?? sjr?.publisher ?? null,
     issn: s.issn_l ?? (s.issn?.[0] ?? null),
     eissn: s.issn && s.issn.length > 1 ? s.issn[1] : null,
-    field: concepts[0] ?? null,
-    scope: concepts.length > 0 ? `Topics: ${concepts.slice(0, 6).join(", ")}.` : null,
-    indexing: ["OpenAlex"],
-    quartile: null, // OpenAlex does not provide SJR quartiles
+    field: sjr?.areas[0] ?? concepts[0] ?? null,
+    scope:
+      sjr && sjr.categories.length > 0
+        ? `Scimago categories: ${sjr.categories.slice(0, 6).join(", ")}.`
+        : concepts.length > 0
+          ? `Topics: ${concepts.slice(0, 6).join(", ")}.`
+          : null,
+    indexing,
+    quartile: sjr?.quartile ?? null,
     impactFactor: typeof if2yr === "number" ? Math.round(if2yr * 100) / 100 : null,
     apc: s.apc_usd ?? null,
-    openAccess: s.is_oa ?? null,
+    openAccess: s.is_oa ?? sjr?.openAccess ?? null,
     submissionUrl: null,
     submissionDeadline: null,
-    country: s.country_code ?? null,
-    notes: null,
-    keywords: concepts.slice(0, 10),
+    country: s.country_code ?? sjr?.country ?? null,
+    notes:
+      sjr?.sjr != null || sjr?.hIndex != null
+        ? `SJR: ${sjr?.sjr ?? "n/a"} · H-index: ${sjr?.hIndex ?? "n/a"} (Scimago).`
+        : null,
+    keywords,
     // provenance
     sourceUrl: s.id,
     officialUrl: s.homepage_url ?? null,
-    dataSource: OPENALEX_SOURCE,
+    dataSource: sjr
+      ? { id: "openalex-scimago", name: "OpenAlex + Scimago", reliability: "external-api" }
+      : OPENALEX_SOURCE,
     verificationStatus: "IMPORTED",
     isUnverified: false,
     lastCheckedAt: new Date().toISOString(),
