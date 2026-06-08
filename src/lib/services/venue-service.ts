@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/http/errors";
 import { logger } from "@/lib/http/logger";
 import { openAlex } from "@/lib/providers/openalex";
+import { scimago } from "@/lib/providers/scimago";
 import type { ConferenceDTO, JournalDTO, SpecialIssueDTO } from "@/lib/dto";
 import {
   toConferenceDTO,
@@ -31,14 +32,32 @@ async function safeList<T>(operation: string, run: () => Promise<T[]>): Promise<
  */
 export const venueService = {
   async listJournals(): Promise<JournalDTO[]> {
-    // Live from OpenAlex: a broad listing of high-output journals.
-    return safeList("venueService.listJournals", () =>
-      openAlex.searchJournals({ perPage: 30 }),
-    );
+    // Top journals by SJR from the Scimago catalogue (OpenAlex fallback).
+    if (scimago.isLoaded()) {
+      return scimago.searchJournals({ sort: "sjr", page: 1, pageSize: 24 }).items;
+    }
+    return safeList("venueService.listJournals", () => openAlex.searchJournals({ perPage: 24 }));
   },
 
   async getJournal(id: string): Promise<JournalDTO> {
-    // OpenAlex ids (S####) resolve live; other ids fall back to the DB cache.
+    // Scimago source ids are numeric; OpenAlex ids look like "S####".
+    if (/^\d+$/.test(id)) {
+      const j = scimago.getById(id);
+      if (j) {
+        // Enrich with OpenAlex homepage/scope by ISSN when available.
+        try {
+          const enriched = j.issn ? await openAlex.findJournalByIssn(j.issn) : null;
+          if (enriched) {
+            j.officialUrl = enriched.officialUrl ?? j.officialUrl;
+            if (enriched.scope) j.scope = j.scope ? `${j.scope} ${enriched.scope}` : enriched.scope;
+          }
+        } catch {
+          // enrichment is best-effort
+        }
+        return j;
+      }
+      throw new NotFoundError(`Journal ${id} not found`);
+    }
     if (openAlex.isOpenAlexId(id)) {
       const j = await openAlex.getJournal(id);
       if (!j) throw new NotFoundError(`Journal ${id} not found`);

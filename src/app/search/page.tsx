@@ -1,45 +1,44 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataSourceBadge } from "@/components/data-source-badge";
+import { JournalCard } from "@/components/journal-card";
 import { MockDataNotice } from "@/components/mock-data-notice";
 import type { SearchResults } from "@/lib/dto";
 
-type ContentType = "" | "JOURNAL" | "CONFERENCE" | "SPECIAL_ISSUE" | "PAPER";
+type ContentType = "JOURNAL" | "CONFERENCE" | "SPECIAL_ISSUE" | "PAPER";
 
-const INDEXING_OPTIONS = [
-  "Scopus",
-  "Web of Science",
-  "IEEE",
-  "ACM",
-  "Springer",
-  "Elsevier",
-  "MDPI",
-  "Frontiers",
-];
+const PAGE_SIZE = 18;
 
 export default function SearchPage() {
   const [q, setQ] = useState("");
-  const [contentType, setContentType] = useState<ContentType>("");
-  const [field, setField] = useState("");
-  const [indexing, setIndexing] = useState("");
+  const [contentType, setContentType] = useState<ContentType>("JOURNAL");
+  const [area, setArea] = useState("");
   const [openAccess, setOpenAccess] = useState<"" | "true" | "false">("");
   const [quartile, setQuartile] = useState("");
   const [publisher, setPublisher] = useState("");
   const [country, setCountry] = useState("");
-  const [apcMin, setApcMin] = useState("");
-  const [apcMax, setApcMax] = useState("");
+  const [sort, setSort] = useState<"sjr" | "hindex" | "title">("sjr");
+  const [page, setPage] = useState(1);
 
+  const [areas, setAreas] = useState<string[]>([]);
   const [results, setResults] = useState<SearchResults | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
 
+  useEffect(() => {
+    fetch("/api/meta/areas")
+      .then((r) => r.json())
+      .then((d) => setAreas(d.areas ?? []))
+      .catch(() => setAreas([]));
+  }, []);
+
   const runSearch = useCallback(
-    async (e?: React.FormEvent) => {
-      e?.preventDefault();
+    async (nextPage = 1) => {
       setLoading(true);
       setError(null);
       try {
@@ -49,22 +48,20 @@ export default function SearchPage() {
         };
         add("q", q);
         add("contentType", contentType);
-        add("field", field);
-        add("indexing", indexing);
+        add("field", area);
         add("openAccess", openAccess);
         add("quartile", quartile);
         add("publisher", publisher);
         add("country", country);
-        add("apcMin", apcMin);
-        add("apcMax", apcMax);
+        add("sort", sort);
+        params.set("page", String(nextPage));
+        params.set("pageSize", String(PAGE_SIZE));
 
         const res = await fetch(`/api/search?${params.toString()}`);
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          throw new Error(body?.error === "validation" ? "Invalid filters." : "Search failed.");
-        }
+        if (!res.ok) throw new Error("Search failed.");
         const data: SearchResults = await res.json();
         setResults(data);
+        setPage(nextPage);
         setSearched(true);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Search failed.");
@@ -73,126 +70,114 @@ export default function SearchPage() {
         setLoading(false);
       }
     },
-    [q, contentType, field, indexing, openAccess, quartile, publisher, country, apcMin, apcMax],
+    [q, contentType, area, openAccess, quartile, publisher, country, sort],
   );
+
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    runSearch(1);
+  };
+
+  const totalPages = results?.journalsTotal
+    ? Math.ceil(results.journalsTotal / PAGE_SIZE)
+    : 1;
 
   return (
     <main className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight">Search</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">Search venues</h1>
       <MockDataNotice />
 
-      <form onSubmit={runSearch} className="flex flex-col gap-4 lg:flex-row">
+      <form onSubmit={onSubmit} className="flex flex-col gap-4 lg:flex-row">
         {/* Filters sidebar */}
-        <aside className="flex w-full flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 lg:w-72">
-          <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            Content type
-            <select
-              value={contentType}
-              onChange={(e) => setContentType(e.target.value as ContentType)}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-            >
-              <option value="">All types</option>
-              <option value="JOURNAL">Journals</option>
-              <option value="CONFERENCE">Conferences</option>
-              <option value="SPECIAL_ISSUE">Special issues</option>
-              <option value="PAPER">Papers</option>
-            </select>
-          </label>
-
-          <FilterText label="Field / discipline" value={field} onChange={setField} />
-
-          <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            Indexing
-            <select
-              value={indexing}
-              onChange={(e) => setIndexing(e.target.value)}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-            >
-              <option value="">Any</option>
-              {INDEXING_OPTIONS.map((ix) => (
-                <option key={ix} value={ix}>
-                  {ix}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            Open access
-            <select
-              value={openAccess}
-              onChange={(e) => setOpenAccess(e.target.value as "" | "true" | "false")}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-            >
-              <option value="">Any</option>
-              <option value="true">Open access</option>
-              <option value="false">Subscription</option>
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
-            Quartile (journals)
-            <select
-              value={quartile}
-              onChange={(e) => setQuartile(e.target.value)}
-              className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
-            >
-              <option value="">Any</option>
-              <option value="Q1">Q1</option>
-              <option value="Q2">Q2</option>
-              <option value="Q3">Q3</option>
-              <option value="Q4">Q4</option>
-            </select>
-          </label>
-
-          <FilterText label="Publisher / organizer" value={publisher} onChange={setPublisher} />
-          <FilterText label="Country / region" value={country} onChange={setCountry} />
-
-          <div className="flex gap-2">
-            <FilterText label="APC min" value={apcMin} onChange={setApcMin} type="number" />
-            <FilterText label="APC max" value={apcMax} onChange={setApcMax} type="number" />
+        <aside className="flex w-full flex-col gap-3 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm lg:w-72">
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            <SlidersHorizontal className="h-4 w-4 text-[var(--primary)]" /> Filters
           </div>
+
+          <Select label="Content type" value={contentType} onChange={(v) => setContentType(v as ContentType)}
+            options={[["JOURNAL", "Journals"], ["CONFERENCE", "Conferences"], ["SPECIAL_ISSUE", "Special issues"], ["PAPER", "Papers"]]} />
+
+          <Select label="Subject area" value={area} onChange={setArea}
+            options={[["", "Any area"], ...areas.map((a) => [a, a] as [string, string])]} />
+
+          <Select label="Quartile" value={quartile} onChange={setQuartile}
+            options={[["", "Any"], ["Q1", "Q1"], ["Q2", "Q2"], ["Q3", "Q3"], ["Q4", "Q4"]]} />
+
+          <Select label="Open access" value={openAccess} onChange={(v) => setOpenAccess(v as "" | "true" | "false")}
+            options={[["", "Any"], ["true", "Open access"], ["false", "Subscription"]]} />
+
+          <Select label="Sort by" value={sort} onChange={(v) => setSort(v as typeof sort)}
+            options={[["sjr", "SJR (high → low)"], ["hindex", "H-index"], ["title", "Title (A–Z)"]]} />
+
+          <Text label="Publisher" value={publisher} onChange={setPublisher} />
+          <Text label="Country" value={country} onChange={setCountry} />
         </aside>
 
         {/* Query + results */}
         <div className="flex flex-1 flex-col gap-4">
           <div className="flex gap-2">
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by keyword, title, scope…"
-              className="flex-1 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
-            />
+            <div className="relative flex-1">
+              <SearchIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted-foreground)]" />
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Search by name, topic, publisher…"
+                className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] py-2.5 pl-9 pr-3 text-sm"
+              />
+            </div>
             <button
               type="submit"
               disabled={loading}
-              className="rounded-[var(--radius)] bg-[var(--primary)] px-5 py-2 text-sm font-medium text-[var(--primary-foreground)] disabled:opacity-60"
+              className="rounded-[var(--radius)] bg-[var(--primary)] px-6 py-2.5 text-sm font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:opacity-60"
             >
               {loading ? "Searching…" : "Search"}
             </button>
           </div>
 
-          {loading && <p className="text-sm text-[var(--muted-foreground)]">Loading results…</p>}
+          {loading && <SkeletonGrid />}
           {error && (
             <p className="rounded-[var(--radius)] border border-[var(--warning)] bg-[var(--warning-bg)] px-3 py-2 text-sm text-[var(--warning)]">
               {error}
             </p>
           )}
 
-          {!loading && !error && searched && results && results.total === 0 && (
+          {!loading && !searched && (
             <p className="text-sm text-[var(--muted-foreground)]">
-              No results match your search. Try broadening your filters.
+              Enter a query or pick filters, then press Search. Try area “Computer Science” + Quartile Q1.
             </p>
+          )}
+
+          {!loading && !error && searched && results && results.total === 0 && (
+            <div className="flex flex-col items-center gap-2 rounded-[var(--radius)] border border-dashed border-[var(--border)] py-16 text-center">
+              <SearchIcon className="h-8 w-8 text-[var(--muted-foreground)]" />
+              <p className="text-sm text-[var(--muted-foreground)]">No results. Try broadening your filters.</p>
+            </div>
           )}
 
           {!loading && !error && results && results.total > 0 && (
-            <ResultsList results={results} />
+            <Results results={results} />
           )}
 
-          {!searched && !loading && (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Enter a query or apply filters, then press Search.
-            </p>
+          {!loading && contentType === "JOURNAL" && results && (results.journalsTotal ?? 0) > PAGE_SIZE && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => runSearch(page - 1)}
+                disabled={page <= 1}
+                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-40"
+              >
+                ← Prev
+              </button>
+              <span className="text-sm text-[var(--muted-foreground)]">
+                Page {page} / {totalPages} · {results.journalsTotal} journals
+              </span>
+              <button
+                onClick={() => runSearch(page + 1)}
+                disabled={page >= totalPages}
+                className="rounded-[var(--radius)] border border-[var(--border)] px-3 py-1.5 text-sm disabled:opacity-40"
+              >
+                Next →
+              </button>
+            </div>
           )}
         </div>
       </form>
@@ -200,22 +185,40 @@ export default function SearchPage() {
   );
 }
 
-function FilterText({
+function Select({
   label,
   value,
   onChange,
-  type = "text",
+  options,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
-  type?: string;
+  options: [string, string][];
 }) {
   return (
-    <label className="flex flex-1 flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+    <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
+      {label}
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
+      >
+        {options.map(([v, l]) => (
+          <option key={v} value={v}>
+            {l}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function Text({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="flex flex-col gap-1 text-xs font-medium uppercase tracking-wide text-[var(--muted-foreground)]">
       {label}
       <input
-        type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className="rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-2 py-1.5 text-sm text-[var(--foreground)]"
@@ -224,111 +227,96 @@ function FilterText({
   );
 }
 
-function ResultsList({ results }: { results: SearchResults }) {
+function SkeletonGrid() {
   return (
-    <div className="flex flex-col gap-6">
-      <p className="text-sm text-[var(--muted-foreground)]">{results.total} result(s)</p>
-
-      <ResultGroup title="Journals">
-        {results.journals.map((j) => (
-          <ResultCard
-            key={j.id}
-            href={`/journals/${j.id}`}
-            title={j.name}
-            subtitle={[j.publisher, j.field].filter(Boolean).join(" · ")}
-            badges={[j.quartile, ...j.indexing.slice(0, 2)].filter(Boolean) as string[]}
-            dataSource={j.dataSource}
-            isUnverified={j.isUnverified}
-          />
-        ))}
-      </ResultGroup>
-
-      <ResultGroup title="Conferences">
-        {results.conferences.map((c) => (
-          <ResultCard
-            key={c.id}
-            href={`/conferences/${c.id}`}
-            title={c.acronym ? `${c.acronym} — ${c.name}` : c.name}
-            subtitle={[c.organizer, c.location].filter(Boolean).join(" · ")}
-            badges={[c.lifecycleStatus, c.mode].filter(Boolean) as string[]}
-            dataSource={c.dataSource}
-            isUnverified={c.isUnverified}
-          />
-        ))}
-      </ResultGroup>
-
-      <ResultGroup title="Special issues">
-        {results.specialIssues.map((s) => (
-          <ResultCard
-            key={s.id}
-            href={`/special-issues/${s.id}`}
-            title={s.title}
-            subtitle={[s.journalName, s.field].filter(Boolean).join(" · ")}
-            badges={[s.lifecycleStatus].filter(Boolean) as string[]}
-            dataSource={s.dataSource}
-            isUnverified={s.isUnverified}
-          />
-        ))}
-      </ResultGroup>
-
-      <ResultGroup title="Papers">
-        {results.papers.map((p) => (
-          <ResultCard
-            key={p.id}
-            title={p.title}
-            subtitle={[p.authors, p.year ? String(p.year) : null].filter(Boolean).join(" · ")}
-            badges={p.keywords.slice(0, 3)}
-            dataSource={p.dataSource}
-            isUnverified={p.isUnverified}
-          />
-        ))}
-      </ResultGroup>
+    <div className="grid gap-3 sm:grid-cols-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div key={i} className="h-32 animate-pulse rounded-[var(--radius)] border border-[var(--border)] bg-[var(--muted)]" />
+      ))}
     </div>
   );
 }
 
-function ResultGroup({ title, children }: { title: string; children: React.ReactNode }) {
-  const items = Array.isArray(children) ? children : [children];
-  const hasItems = items.some((c) => c);
-  if (!hasItems) return null;
+function Results({ results }: { results: SearchResults }) {
+  return (
+    <div className="flex flex-col gap-6">
+      {results.journals.length > 0 && (
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {results.journals.map((j) => (
+            <li key={j.id}>
+              <JournalCard journal={j} />
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {results.conferences.length > 0 && (
+        <Group title="Conferences">
+          {results.conferences.map((c) => (
+            <SimpleCard key={c.id} href={`/conferences/${c.id}`} title={c.acronym ? `${c.acronym} — ${c.name}` : c.name}
+              subtitle={[c.organizer, c.location].filter(Boolean).join(" · ")} badges={[c.lifecycleStatus]} ds={c.dataSource} unv={c.isUnverified} />
+          ))}
+        </Group>
+      )}
+
+      {results.specialIssues.length > 0 && (
+        <Group title="Special issues">
+          {results.specialIssues.map((s) => (
+            <SimpleCard key={s.id} href={`/special-issues/${s.id}`} title={s.title}
+              subtitle={[s.journalName, s.field].filter(Boolean).join(" · ")} badges={[s.lifecycleStatus]} ds={s.dataSource} unv={s.isUnverified} />
+          ))}
+        </Group>
+      )}
+
+      {results.papers.length > 0 && (
+        <Group title="Papers">
+          {results.papers.map((p) => (
+            <SimpleCard key={p.id} title={p.title}
+              subtitle={[p.authors, p.year ? String(p.year) : null].filter(Boolean).join(" · ")} badges={p.keywords.slice(0, 3)} ds={p.dataSource} unv={p.isUnverified} />
+          ))}
+        </Group>
+      )}
+    </div>
+  );
+}
+
+function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="flex flex-col gap-3">
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
-        {title}
-      </h2>
+      <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">{title}</h2>
       <ul className="grid gap-3 sm:grid-cols-2">{children}</ul>
     </section>
   );
 }
 
-function ResultCard({
+function SimpleCard({
   href,
   title,
   subtitle,
   badges,
-  dataSource,
-  isUnverified,
+  ds,
+  unv,
 }: {
   href?: string;
   title: string;
   subtitle: string;
   badges: string[];
-  dataSource: SearchResults["journals"][number]["dataSource"];
-  isUnverified: boolean;
+  ds: SearchResults["journals"][number]["dataSource"];
+  unv: boolean;
 }) {
   const inner = (
-    <div className="flex h-full flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4">
-      <span className="font-semibold leading-tight">{title}</span>
+    <div className="flex h-full flex-col gap-2 rounded-[var(--radius)] border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
+      <span className="font-semibold leading-snug">{title}</span>
       {subtitle && <span className="text-xs text-[var(--muted-foreground)]">{subtitle}</span>}
       <div className="flex flex-wrap gap-1.5">
-        {badges.map((b) => (
+        {badges.filter(Boolean).map((b) => (
           <Badge key={b} variant="outline">
             {b}
           </Badge>
         ))}
       </div>
-      <DataSourceBadge dataSource={dataSource} isUnverified={isUnverified} />
+      <DataSourceBadge dataSource={ds} isUnverified={unv} />
     </div>
   );
-  return <li>{href ? <Link href={href} className="block h-full transition-colors hover:opacity-90">{inner}</Link> : inner}</li>;
+  return <li>{href ? <Link href={href} className="block h-full transition-transform hover:-translate-y-0.5">{inner}</Link> : inner}</li>;
 }

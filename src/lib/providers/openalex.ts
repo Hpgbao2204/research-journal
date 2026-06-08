@@ -120,6 +120,10 @@ function sourceToJournalDTO(s: OASource): JournalDTO {
     indexing,
     quartile: sjr?.quartile ?? null,
     impactFactor: typeof if2yr === "number" ? Math.round(if2yr * 100) / 100 : null,
+    sjr: sjr?.sjr ?? null,
+    hIndex: sjr?.hIndex ?? null,
+    areas: sjr?.areas ?? [],
+    categories: sjr?.categories ?? [],
     apc: s.apc_usd ?? null,
     openAccess: s.is_oa ?? sjr?.openAccess ?? null,
     submissionUrl: null,
@@ -230,6 +234,17 @@ export const openAlex = {
   async getJournal(id: string): Promise<JournalDTO | null> {
     if (!isOpenAlexId(id)) return null;
     const s = await getJson<OASource>(`${BASE}/sources/${id}?mailto=${MAILTO}`);
+    return s ? sourceToJournalDTO(s) : null;
+  },
+
+  /** Find an OpenAlex source by ISSN (for homepage/scope enrichment). */
+  async findJournalByIssn(issn: string): Promise<JournalDTO | null> {
+    const clean = issn.trim();
+    if (!clean) return null;
+    const data = await getJson<OAList<OASource>>(
+      `${BASE}/sources?filter=issn:${encodeURIComponent(clean)}&per-page=1&mailto=${MAILTO}`,
+    );
+    const s = data?.results?.[0];
     return s ? sourceToJournalDTO(s) : null;
   },
 

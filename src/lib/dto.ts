@@ -36,6 +36,10 @@ export interface JournalDTO extends ProvenanceDTO {
   indexing: string[];
   quartile: string | null;
   impactFactor: number | null;
+  sjr: number | null;
+  hIndex: number | null;
+  areas: string[];
+  categories: string[];
   apc: number | null;
   openAccess: boolean | null;
   submissionUrl: string | null;
@@ -100,6 +104,10 @@ export interface SearchResults {
   specialIssues: SpecialIssueDTO[];
   papers: PaperDTO[];
   total: number;
+  /** Total journals matching the query across all pages (for pagination). */
+  journalsTotal?: number;
+  page?: number;
+  pageSize?: number;
 }
 
 export interface RecommendationResultDTO {

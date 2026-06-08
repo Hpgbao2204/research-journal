@@ -58,6 +58,10 @@ export const SearchParamsSchema = z
     deadlineTo: z.coerce.date().optional(),
     confDateFrom: z.coerce.date().optional(),
     confDateTo: z.coerce.date().optional(),
+    area: z.string().trim().optional(),
+    sort: z.enum(["sjr", "hindex", "title"]).optional(),
+    page: z.coerce.number().int().min(1).optional(),
+    pageSize: z.coerce.number().int().min(1).max(50).optional(),
   })
   .refine(
     (p) => p.apcMin == null || p.apcMax == null || p.apcMin <= p.apcMax,

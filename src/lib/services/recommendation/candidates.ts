@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { openAlex } from "@/lib/providers/openalex";
+import { scimago } from "@/lib/providers/scimago";
 import type { AnalyzeRequest, VenueType } from "@/lib/schemas";
 
 /**
@@ -38,35 +39,52 @@ export async function queryCandidates(request: AnalyzeRequest): Promise<Candidat
   const candidates: Candidate[] = [];
 
   if (want("JOURNAL")) {
-    // Live candidate journals from OpenAlex, matched to the paper's topic.
-    const query = [request.field, ...request.keywords].filter(Boolean).join(" ") ||
-      request.title;
-    try {
-      const journals = await openAlex.searchJournals({
+    const query = [request.field, ...request.keywords].filter(Boolean).join(" ") || request.title;
+    // Prefer the Scimago catalogue (real quartile/categories); fall back to OpenAlex.
+    if (scimago.isLoaded()) {
+      const { items } = scimago.searchJournals({
         q: query,
         openAccess: request.openAccess,
-        perPage: 25,
+        sort: "sjr",
+        page: 1,
+        pageSize: 25,
       });
-      for (const j of journals) {
+      for (const j of items) {
         candidates.push({
           venueType: "JOURNAL",
           id: j.id,
           name: j.name,
           field: j.field,
           scope: j.scope,
-          keywords: j.keywords,
+          keywords: [...j.categories, ...j.areas],
           indexing: j.indexing,
           submissionDeadline: null,
           submissionUrl: j.officialUrl,
           isUnverified: false,
-          missingFields: [
-            ...(j.quartile ? [] : ["quartile"]),
-            ...(j.apc == null ? ["apc"] : []),
-          ],
+          missingFields: j.quartile ? [] : ["quartile"],
         });
       }
-    } catch {
-      // If OpenAlex is unavailable, journals are simply omitted from candidates.
+    } else {
+      try {
+        const journals = await openAlex.searchJournals({ q: query, openAccess: request.openAccess, perPage: 25 });
+        for (const j of journals) {
+          candidates.push({
+            venueType: "JOURNAL",
+            id: j.id,
+            name: j.name,
+            field: j.field,
+            scope: j.scope,
+            keywords: j.keywords,
+            indexing: j.indexing,
+            submissionDeadline: null,
+            submissionUrl: j.officialUrl,
+            isUnverified: false,
+            missingFields: j.quartile ? [] : ["quartile"],
+          });
+        }
+      } catch {
+        // OpenAlex unavailable: journals omitted from candidates.
+      }
     }
   }
 

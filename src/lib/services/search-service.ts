@@ -4,6 +4,7 @@ import { logger } from "@/lib/http/logger";
 import type { SearchParams } from "@/lib/schemas";
 import type { SearchResults } from "@/lib/dto";
 import { openAlex } from "@/lib/providers/openalex";
+import { scimago } from "@/lib/providers/scimago";
 import {
   toConferenceDTO,
   toSpecialIssueDTO,
@@ -49,25 +50,40 @@ async function runSearch(params: SearchParams): Promise<SearchResults> {
   const fieldName = params.field;
   const indexing = params.indexing;
 
-  // ---- Journals (live from OpenAlex) -------------------------------------
+  // ---- Journals (Scimago catalogue; OpenAlex fallback) -------------------
   let journals: SearchResults["journals"] = [];
+  let journalsTotal = 0;
+  const page = params.page ?? 1;
+  const pageSize = params.pageSize ?? 20;
   if (includesContent(params, "JOURNAL")) {
-    // OpenAlex has no Scopus/IEEE/... indexing flags, so fold the chosen
-    // indexing/publisher into the search query (e.g. IEEE -> IEEE journals)
-    // rather than filtering on data we don't have.
-    const journalQuery = [q, indexing].filter(Boolean).join(" ").trim() || undefined;
-    journals = await openAlex.searchJournals({
-      q: journalQuery,
-      field: fieldName,
-      openAccess: params.openAccess,
-      country: params.country,
-      publisher: params.publisher,
-      perPage: 30,
-    });
-    // Apply filters only where OpenAlex provides the underlying data.
-    if (params.quartile) journals = journals.filter((j) => j.quartile === params.quartile);
-    if (params.apcMin != null) journals = journals.filter((j) => j.apc != null && j.apc >= params.apcMin!);
-    if (params.apcMax != null) journals = journals.filter((j) => j.apc != null && j.apc <= params.apcMax!);
+    if (scimago.isLoaded()) {
+      const res = scimago.searchJournals({
+        q: [q, indexing && indexing !== "Scopus" ? indexing : ""].filter(Boolean).join(" ").trim() || undefined,
+        area: fieldName,
+        quartile: params.quartile,
+        openAccess: params.openAccess,
+        country: params.country,
+        publisher: params.publisher,
+        sort: params.sort,
+        page,
+        pageSize,
+      });
+      journals = res.items;
+      journalsTotal = res.total;
+    } else {
+      // Fallback: live OpenAlex when the Scimago CSV is unavailable.
+      const journalQuery = [q, indexing].filter(Boolean).join(" ").trim() || undefined;
+      journals = await openAlex.searchJournals({
+        q: journalQuery,
+        field: fieldName,
+        openAccess: params.openAccess,
+        country: params.country,
+        publisher: params.publisher,
+        perPage: 30,
+      });
+      if (params.quartile) journals = journals.filter((j) => j.quartile === params.quartile);
+      journalsTotal = journals.length;
+    }
   }
 
   // ---- Conferences -------------------------------------------------------
@@ -148,5 +164,8 @@ async function runSearch(params: SearchParams): Promise<SearchResults> {
       conferences.length +
       specialIssues.length +
       papers.length,
+    journalsTotal,
+    page,
+    pageSize,
   };
 }
