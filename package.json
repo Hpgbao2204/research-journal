@@ -19,6 +19,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.2.17",
     "@hookform/resolvers": "^5.4.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -30,6 +31,7 @@
     "lucide-react": "^1.17.0",
     "next": "16.2.7",
     "pg": "^8.13.1",
+    "pglite-prisma-adapter": "^0.6.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-hook-form": "^7.77.0",

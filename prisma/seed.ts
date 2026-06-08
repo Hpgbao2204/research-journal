@@ -27,20 +27,6 @@ import {
   VenueLifecycleStatus,
   VerificationStatus,
 } from "@prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-
-// Prisma 7 constructs the client with a driver adapter; the connection URL is
-// read from DATABASE_URL (see prisma.config.ts / .env).
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) {
-  throw new Error(
-    "DATABASE_URL is not set. Copy .env.example to .env and set the PostgreSQL connection string before seeding.",
-  );
-}
-
-const prisma = new PrismaClient({
-  adapter: new PrismaPg({ connectionString }),
-});
 
 // Stable id so the sample DataSource is upserted (not duplicated) across runs.
 const SAMPLE_DATA_SOURCE_ID = "ds-sample-mock";
@@ -110,7 +96,7 @@ type SeedCounts = {
   papers: number;
 };
 
-async function main(): Promise<void> {
+export async function seedDatabase(prisma: PrismaClient): Promise<void> {
   // -------------------------------------------------------------------------
   // 1. Sample DataSource (provenance anchor)
   // -------------------------------------------------------------------------
@@ -656,12 +642,35 @@ async function main(): Promise<void> {
   console.table(counts);
 }
 
-main()
-  .then(async () => {
+// CLI entry point: `tsx prisma/seed.ts` (used by `prisma db seed`).
+// Constructs its own client from DATABASE_URL using the appropriate adapter.
+async function runCli(): Promise<void> {
+  const { PrismaClient } = await import("@prisma/client");
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("DATABASE_URL is not set. Copy .env.example to .env first.");
+  }
+
+  let prisma: InstanceType<typeof PrismaClient>;
+  if (connectionString.startsWith("pglite")) {
+    const { getPgliteAdapter, ensurePgliteSchema } = await import("../src/lib/db/pglite");
+    await ensurePgliteSchema();
+    // Cast: pglite-prisma-adapter ships v6 driver-adapter-utils types which are
+    // structurally compatible with Prisma 7 at runtime but differ nominally.
+    prisma = new PrismaClient({ adapter: (await getPgliteAdapter()) as never });
+  } else {
+    const { PrismaPg } = await import("@prisma/adapter-pg");
+    prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  }
+
+  try {
+    await seedDatabase(prisma);
+  } finally {
     await prisma.$disconnect();
-  })
-  .catch(async (err) => {
-    console.error("Seed failed:", err);
-    await prisma.$disconnect();
-    process.exit(1);
-  });
+  }
+}
+
+runCli().catch((err) => {
+  console.error("Seed failed:", err);
+  process.exit(1);
+});
