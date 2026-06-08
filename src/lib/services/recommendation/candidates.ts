@@ -1,11 +1,15 @@
-import { prisma } from "@/lib/db/prisma";
 import { openAlex } from "@/lib/providers/openalex";
 import { scimago } from "@/lib/providers/scimago";
 import type { AnalyzeRequest, VenueType } from "@/lib/schemas";
 
 /**
- * A venue candidate drawn from the database. Recommendations may ONLY reference
- * candidates returned here — the service never invents venues (grounding).
+ * A venue candidate. Recommendations may ONLY reference candidates returned
+ * here — the service never invents venues (grounding).
+ *
+ * Candidates are REAL journals only (Scimago, OpenAlex fallback). We do not
+ * recommend the sample/mock conferences and special issues, because suggesting
+ * fabricated venues would violate the project's data-integrity principle. When
+ * real conference/CFP sources are integrated they can be added here.
  */
 export interface Candidate {
   venueType: VenueType;
@@ -22,41 +26,59 @@ export interface Candidate {
   missingFields: string[];
 }
 
-function missing(record: Record<string, unknown>, fields: string[]): string[] {
-  return fields.filter((f) => {
-    const v = record[f];
-    return v === null || v === undefined || v === "" || (Array.isArray(v) && v.length === 0);
-  });
+/** Split multi-word category/area labels into lowercase tokens for matching. */
+function tokenizeLabels(labels: string[]): string[] {
+  const out = new Set<string>();
+  for (const label of labels) {
+    out.add(label.toLowerCase());
+    for (const w of label.toLowerCase().split(/[^a-z0-9]+/)) {
+      if (w.length > 2) out.add(w);
+    }
+  }
+  return [...out];
 }
 
-/**
- * Load candidate venues from the database, restricted to the preferred venue
- * type when supplied (Req 6.5, 7.2). Candidates are the only universe from
- * which recommendations may be drawn.
- */
 export async function queryCandidates(request: AnalyzeRequest): Promise<Candidate[]> {
-  const want = (t: VenueType) => !request.preferredVenueType || request.preferredVenueType === t;
-  const candidates: Candidate[] = [];
+  // Only journals are recommendable today (real, verified data).
+  if (request.preferredVenueType && request.preferredVenueType !== "JOURNAL") return [];
 
-  if (want("JOURNAL")) {
-    const query = [request.field, ...request.keywords].filter(Boolean).join(" ") || request.title;
-    // Prefer the Scimago catalogue (real quartile/categories); fall back to OpenAlex.
-    if (scimago.isLoaded()) {
-      const { items } = scimago.searchJournals({
-        q: query,
-        openAccess: request.openAccess,
-        sort: "sjr",
-        page: 1,
-        pageSize: 25,
+  const candidates: Candidate[] = [];
+  const query = [request.field, ...request.keywords].filter(Boolean).join(" ") || request.title;
+
+  if (scimago.isLoaded()) {
+    const { items } = scimago.searchJournals({
+      q: query,
+      openAccess: request.openAccess,
+      sort: "sjr",
+      page: 1,
+      pageSize: 30,
+    });
+    for (const j of items) {
+      candidates.push({
+        venueType: "JOURNAL",
+        id: j.id,
+        name: j.name,
+        field: j.field,
+        scope: j.scope,
+        keywords: tokenizeLabels([...j.categories, ...j.areas]),
+        indexing: j.indexing,
+        submissionDeadline: null,
+        submissionUrl: j.officialUrl,
+        isUnverified: false,
+        missingFields: j.quartile ? [] : ["quartile"],
       });
-      for (const j of items) {
+    }
+  } else {
+    try {
+      const journals = await openAlex.searchJournals({ q: query, openAccess: request.openAccess, perPage: 30 });
+      for (const j of journals) {
         candidates.push({
           venueType: "JOURNAL",
           id: j.id,
           name: j.name,
           field: j.field,
           scope: j.scope,
-          keywords: [...j.categories, ...j.areas],
+          keywords: tokenizeLabels(j.keywords),
           indexing: j.indexing,
           submissionDeadline: null,
           submissionUrl: j.officialUrl,
@@ -64,73 +86,8 @@ export async function queryCandidates(request: AnalyzeRequest): Promise<Candidat
           missingFields: j.quartile ? [] : ["quartile"],
         });
       }
-    } else {
-      try {
-        const journals = await openAlex.searchJournals({ q: query, openAccess: request.openAccess, perPage: 25 });
-        for (const j of journals) {
-          candidates.push({
-            venueType: "JOURNAL",
-            id: j.id,
-            name: j.name,
-            field: j.field,
-            scope: j.scope,
-            keywords: j.keywords,
-            indexing: j.indexing,
-            submissionDeadline: null,
-            submissionUrl: j.officialUrl,
-            isUnverified: false,
-            missingFields: j.quartile ? [] : ["quartile"],
-          });
-        }
-      } catch {
-        // OpenAlex unavailable: journals omitted from candidates.
-      }
-    }
-  }
-
-  if (want("CONFERENCE")) {
-    const rows = await prisma.conference.findMany({
-      include: { field: true, keywords: true },
-    });
-    for (const c of rows) {
-      candidates.push({
-        venueType: "CONFERENCE",
-        id: c.id,
-        name: c.name,
-        field: c.field?.name ?? null,
-        scope: null,
-        keywords: c.keywords.map((k) => k.term),
-        indexing: c.indexing,
-        submissionDeadline: c.submissionDeadline,
-        submissionUrl: c.cfpUrl,
-        isUnverified: c.verificationStatus === "UNVERIFIED_MOCK",
-        missingFields: missing(c as unknown as Record<string, unknown>, [
-          "organizer", "location", "ranking", "submissionDeadline", "conferenceDate",
-        ]),
-      });
-    }
-  }
-
-  if (want("SPECIAL_ISSUE")) {
-    const rows = await prisma.specialIssue.findMany({
-      include: { field: true, keywords: true },
-    });
-    for (const s of rows) {
-      candidates.push({
-        venueType: "SPECIAL_ISSUE",
-        id: s.id,
-        name: s.title,
-        field: s.field?.name ?? null,
-        scope: s.topicScope,
-        keywords: s.keywords.map((k) => k.term),
-        indexing: [],
-        submissionDeadline: s.submissionDeadline,
-        submissionUrl: s.submissionUrl,
-        isUnverified: s.verificationStatus === "UNVERIFIED_MOCK",
-        missingFields: missing(s as unknown as Record<string, unknown>, [
-          "publisher", "guestEditors", "submissionDeadline", "publicationTimeline",
-        ]),
-      });
+    } catch {
+      // OpenAlex unavailable: no candidates.
     }
   }
 

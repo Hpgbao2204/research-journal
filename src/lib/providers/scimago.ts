@@ -244,32 +244,44 @@ export const scimago = {
   /** Filter, sort, and paginate the journal catalogue. */
   searchJournals(query: ScimagoQuery): { items: JournalDTO[]; total: number } {
     const { list } = getData();
-    const q = query.q?.trim().toLowerCase();
+    const tokens = (query.q ?? "")
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter((t) => t.length > 2);
     const area = query.area?.toLowerCase();
     const country = query.country?.toLowerCase();
     const publisher = query.publisher?.toLowerCase();
 
-    let filtered = list.filter((e) => {
-      if (q && !(e.title.toLowerCase().includes(q) || e.categories.some((c) => c.toLowerCase().includes(q)) || e.publisher?.toLowerCase().includes(q))) return false;
-      if (area && !e.areas.some((a) => a.toLowerCase() === area)) return false;
-      if (query.quartile && e.quartile !== query.quartile) return false;
-      if (query.openAccess !== undefined && e.openAccess !== query.openAccess) return false;
-      if (country && e.country?.toLowerCase() !== country) return false;
-      if (publisher && !e.publisher?.toLowerCase().includes(publisher)) return false;
-      return true;
-    });
+    const scored: Array<{ e: ScimagoEntry; rel: number }> = [];
+    for (const e of list) {
+      if (area && !e.areas.some((a) => a.toLowerCase() === area)) continue;
+      if (query.quartile && e.quartile !== query.quartile) continue;
+      if (query.openAccess !== undefined && e.openAccess !== query.openAccess) continue;
+      if (country && e.country?.toLowerCase() !== country) continue;
+      if (publisher && !e.publisher?.toLowerCase().includes(publisher)) continue;
+
+      let rel = 0;
+      if (tokens.length > 0) {
+        const haystack = `${e.title} ${e.categories.join(" ")} ${e.areas.join(" ")} ${e.publisher ?? ""}`.toLowerCase();
+        for (const t of tokens) if (haystack.includes(t)) rel += 1;
+        if (rel === 0) continue; // must match at least one query token
+      }
+      scored.push({ e, rel });
+    }
 
     const sort = query.sort ?? "sjr";
-    filtered = filtered.sort((a, b) => {
-      if (sort === "title") return a.title.localeCompare(b.title);
-      if (sort === "hindex") return (b.hIndex ?? 0) - (a.hIndex ?? 0);
-      return (b.sjr ?? 0) - (a.sjr ?? 0);
+    scored.sort((a, b) => {
+      // When a text query is present, rank by relevance first.
+      if (b.rel !== a.rel) return b.rel - a.rel;
+      if (sort === "title") return a.e.title.localeCompare(b.e.title);
+      if (sort === "hindex") return (b.e.hIndex ?? 0) - (a.e.hIndex ?? 0);
+      return (b.e.sjr ?? 0) - (a.e.sjr ?? 0);
     });
 
-    const total = filtered.length;
+    const total = scored.length;
     const page = Math.max(1, query.page ?? 1);
     const pageSize = Math.min(Math.max(query.pageSize ?? 20, 1), 50);
     const start = (page - 1) * pageSize;
-    return { items: filtered.slice(start, start + pageSize).map(toJournalDTO), total };
+    return { items: scored.slice(start, start + pageSize).map((s) => toJournalDTO(s.e)), total };
   },
 };
