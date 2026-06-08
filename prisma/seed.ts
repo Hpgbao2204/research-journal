@@ -670,7 +670,14 @@ async function runCli(): Promise<void> {
   }
 }
 
-runCli().catch((err) => {
-  console.error("Seed failed:", err);
-  process.exit(1);
-});
+// Only run the CLI when this file is executed directly (e.g. `tsx prisma/seed.ts`
+// via `prisma db seed`). Do NOT run when the module is imported elsewhere
+// (admin service, instrumentation), which would seed unexpectedly — including
+// inside `next build` workers.
+const invoked = process.argv[1] ?? "";
+if (/seed\.(ts|js|mjs|cjs)$/.test(invoked)) {
+  runCli().catch((err) => {
+    console.error("Seed failed:", err);
+    process.exit(1);
+  });
+}

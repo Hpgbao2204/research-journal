@@ -8,6 +8,9 @@
  */
 export async function register(): Promise<void> {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // Do not initialize/seed during `next build` (page-data collection runs in
+  // workers where the embedded DB must not be touched). Only run when serving.
+  if (process.env.NEXT_PHASE === "phase-production-build") return;
   if (!(process.env.DATABASE_URL ?? "").startsWith("pglite")) return;
 
   const { ensurePgliteSchema } = await import("@/lib/db/pglite");
