@@ -58,12 +58,13 @@ async function runSearch(params: SearchParams): Promise<SearchResults> {
   if (includesContent(params, "JOURNAL")) {
     if (scimago.isLoaded()) {
       const res = scimago.searchJournals({
-        q: [q, indexing && indexing !== "Scopus" ? indexing : ""].filter(Boolean).join(" ").trim() || undefined,
+        q: q || undefined,
         area: fieldName,
         quartile: params.quartile,
         openAccess: params.openAccess,
         country: params.country,
         publisher: params.publisher,
+        indexing,
         sort: params.sort,
         page,
         pageSize,

@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { logger } from "@/lib/http/logger";
 import type { JournalDTO } from "@/lib/dto";
+import { wos } from "./wos";
 
 /**
  * Scimago (SJR) provider — the primary journal catalogue.
@@ -171,6 +172,9 @@ function getData(): ScimagoData {
 
 function toJournalDTO(e: ScimagoEntry): JournalDTO {
   const now = new Date().toISOString();
+  // Real indexing: Scopus (Scimago is Scopus-based) plus any WoS Core Collection
+  // memberships joined by normalized title (SCIE/SSCI/AHCI/ESCI…).
+  const indexing = ["Scopus", ...wos.indexesForTitle(e.title)];
   return {
     id: e.sourceId,
     name: e.title,
@@ -179,7 +183,7 @@ function toJournalDTO(e: ScimagoEntry): JournalDTO {
     eissn: e.issns[1] ? e.issns[1].replace(/^(\w{4})(\w{4})$/, "$1-$2") : null,
     field: e.areas[0] ?? null,
     scope: e.categories.length > 0 ? `Categories: ${e.categories.join(", ")}.` : null,
-    indexing: ["Scopus"],
+    indexing,
     quartile: e.quartile,
     impactFactor: null,
     sjr: e.sjr,
@@ -212,6 +216,8 @@ export interface ScimagoQuery {
   openAccess?: boolean;
   country?: string;
   publisher?: string;
+  /** Filter to journals carrying this indexing label (e.g. "SCIE", "Scopus"). */
+  indexing?: string;
   sort?: JournalSort;
   page?: number;
   pageSize?: number;
@@ -251,6 +257,7 @@ export const scimago = {
     const area = query.area?.toLowerCase();
     const country = query.country?.toLowerCase();
     const publisher = query.publisher?.toLowerCase();
+    const indexing = query.indexing?.toLowerCase();
 
     const scored: Array<{ e: ScimagoEntry; rel: number }> = [];
     for (const e of list) {
@@ -259,6 +266,10 @@ export const scimago = {
       if (query.openAccess !== undefined && e.openAccess !== query.openAccess) continue;
       if (country && e.country?.toLowerCase() !== country) continue;
       if (publisher && !e.publisher?.toLowerCase().includes(publisher)) continue;
+      if (indexing) {
+        const labels = ["scopus", ...wos.indexesForTitle(e.title).map((x) => x.toLowerCase())];
+        if (!labels.some((l) => l === indexing || l.includes(indexing))) continue;
+      }
 
       let rel = 0;
       if (tokens.length > 0) {
