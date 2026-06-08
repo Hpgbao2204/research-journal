@@ -7,46 +7,39 @@ import {
   type AnalysisResult,
 } from "@/lib/schemas";
 import type { RecommendationResultDTO } from "@/lib/dto";
-import { aiClient } from "./recommendation/ai-client";
 import { queryCandidates, type Candidate } from "./recommendation/candidates";
-import { ruleBasedAnalyze } from "./recommendation/fallback";
-import { buildPrompt } from "./recommendation/prompt";
+import { buildItems, ruleBasedAnalyze } from "./recommendation/fallback";
+import { aiAnalyze } from "./recommendation/ai-analyze";
 import { semanticRerank } from "./recommendation/semantic";
 
-const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS ?? "20000");
-
 /**
- * Try the AI path. Returns a schema-valid, GROUNDED AnalysisResult or null if
- * anything goes wrong (no key, error, timeout, invalid output). Non-conforming
- * output is rejected (never persisted) per Req 7.8.
+ * AI path: ask the model for a compact paper analysis only (small models are
+ * unreliable at emitting the full grounded result), then build the venue list
+ * deterministically from that analysis so it is always grounded and schema
+ * valid. Returns null when AI is unavailable or fails — the caller then uses
+ * the fully deterministic rule-based path. Never throws (Req 15.2).
  */
 async function tryAi(
   request: AnalyzeRequest,
   candidates: Candidate[],
 ): Promise<AnalysisResult | null> {
-  if (!aiClient.isConfigured()) return null;
+  const ai = await aiAnalyze(request);
+  if (!ai) return null;
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
-  try {
-    const raw = await aiClient.complete(buildPrompt(request, candidates), controller.signal);
-    const parsed = JSON.parse(raw) as unknown;
-    const result = AnalysisResultSchema.safeParse(parsed);
-    if (!result.success) {
-      logger.warn("recommendation.ai.invalidSchema", { issues: result.error.issues.length });
-      return null;
-    }
-    // Grounding: drop any item that does not reference a real candidate id.
-    const byId = new Map(candidates.map((c) => [c.id, c]));
-    const grounded = result.data.items.filter((it) => byId.has(it.venueId));
-    grounded.sort((a, b) => b.matchScore - a.matchScore || a.venueName.localeCompare(b.venueName));
-    return { ...result.data, items: grounded, method: "AI" };
-  } catch (err) {
-    logger.error("recommendation.ai.failed", err);
+  const items = buildItems(request, candidates, ai.analysis);
+  const result: AnalysisResult = {
+    analysis: ai.analysis,
+    items,
+    suggestedTitle: ai.suggestedTitle,
+    suggestedAbstract: ai.suggestedAbstract,
+    method: "AI",
+  };
+  const validated = AnalysisResultSchema.safeParse(result);
+  if (!validated.success) {
+    logger.warn("recommendation.ai.invalidSchema", { issues: validated.error.issues.length });
     return null;
-  } finally {
-    clearTimeout(timer);
   }
+  return validated.data;
 }
 
 async function persist(

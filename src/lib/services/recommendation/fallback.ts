@@ -1,4 +1,4 @@
-import type { AnalyzeRequest, AnalysisResult, RecommendationItemDTO } from "@/lib/schemas";
+import type { AnalyzeRequest, Analysis, AnalysisResult, RecommendationItemDTO } from "@/lib/schemas";
 import { extractAnalysis, tokenize } from "./extract";
 import type { Candidate } from "./candidates";
 
@@ -104,14 +104,18 @@ function reasonFor(s: ScoreSignals, candidate: Candidate): string {
     : "Weak match; listed for completeness.";
 }
 
-/** Produce a full, schema-valid AnalysisResult deterministically. */
-export function ruleBasedAnalyze(
+/**
+ * Score and rank candidates against a given analysis. Shared by the rule-based
+ * fallback and the AI path (which only supplies a richer `analysis`), so the
+ * venue list is always grounded, deterministic, and schema-valid regardless of
+ * whether the LLM was used. Returns items sorted by descending matchScore.
+ */
+export function buildItems(
   request: AnalyzeRequest,
   candidates: Candidate[],
+  analysis: Analysis,
   now: Date = new Date(),
-): AnalysisResult {
-  const analysis = extractAnalysis(request);
-
+): RecommendationItemDTO[] {
   const items: RecommendationItemDTO[] = candidates.map((c) => {
     const signals = computeSignals(
       analysis.extractedKeywords,
@@ -141,6 +145,17 @@ export function ruleBasedAnalyze(
 
   // Order by descending match score (stable on name for ties).
   items.sort((a, b) => b.matchScore - a.matchScore || a.venueName.localeCompare(b.venueName));
+  return items;
+}
+
+/** Produce a full, schema-valid AnalysisResult deterministically. */
+export function ruleBasedAnalyze(
+  request: AnalyzeRequest,
+  candidates: Candidate[],
+  now: Date = new Date(),
+): AnalysisResult {
+  const analysis = extractAnalysis(request);
+  const items = buildItems(request, candidates, analysis, now);
 
   const topField = analysis.suitableDisciplines[0] ?? request.field ?? "your field";
   return {
