@@ -79,8 +79,11 @@ interface OAWork {
   title?: string | null;
   publication_year?: number | null;
   doi?: string | null;
+  cited_by_count?: number | null;
   authorships?: Array<{ author?: { display_name?: string } }> | null;
-  primary_location?: { source?: { display_name?: string } | null } | null;
+  primary_location?: { source?: { display_name?: string } | null; landing_page_url?: string | null } | null;
+  open_access?: { is_oa?: boolean; oa_url?: string | null } | null;
+  best_oa_location?: { pdf_url?: string | null; landing_page_url?: string | null } | null;
   abstract_inverted_index?: Record<string, number[]> | null;
   topics?: Array<{ display_name: string }> | null;
 }
@@ -166,6 +169,11 @@ function workToPaperDTO(w: OAWork): PaperDTO {
     .slice(0, 8)
     .join(", ");
   const concepts = (w.topics ?? []).map((c) => c.display_name).filter(Boolean);
+  const oaUrl =
+    w.best_oa_location?.pdf_url ??
+    w.best_oa_location?.landing_page_url ??
+    w.open_access?.oa_url ??
+    null;
   return {
     id,
     title: w.display_name ?? w.title ?? "Untitled",
@@ -175,9 +183,13 @@ function workToPaperDTO(w: OAWork): PaperDTO {
     venueName: w.primary_location?.source?.display_name ?? null,
     year: w.publication_year ?? null,
     doi: w.doi ?? null,
+    doiUrl: w.doi ?? null, // OpenAlex already returns full https://doi.org/... URLs
+    openAccessUrl: oaUrl,
+    openAccess: w.open_access?.is_oa ?? null,
+    citedByCount: w.cited_by_count ?? null,
     keywords: concepts.slice(0, 8),
     sourceUrl: w.id,
-    officialUrl: w.doi ?? null,
+    officialUrl: w.doi ?? w.primary_location?.landing_page_url ?? null,
     dataSource: OPENALEX_SOURCE,
     verificationStatus: "IMPORTED",
     isUnverified: false,

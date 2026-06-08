@@ -93,6 +93,12 @@ export interface PaperDTO extends ProvenanceDTO {
   venueName: string | null;
   year: number | null;
   doi: string | null;
+  /** Direct DOI link (https://doi.org/...). */
+  doiUrl: string | null;
+  /** Free open-access PDF/landing URL when available. */
+  openAccessUrl: string | null;
+  openAccess: boolean | null;
+  citedByCount: number | null;
   keywords: string[];
 }
 

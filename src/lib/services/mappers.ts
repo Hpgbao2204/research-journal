@@ -140,6 +140,10 @@ export function toPaperDTO(p: PaperWithRelations): PaperDTO {
     venueName: p.venueName,
     year: p.year,
     doi: p.doi,
+    doiUrl: p.doi,
+    openAccessUrl: null,
+    openAccess: null,
+    citedByCount: null,
     keywords: p.keywords.map((k) => k.term),
   };
 }
