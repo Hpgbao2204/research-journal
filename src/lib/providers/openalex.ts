@@ -86,6 +86,8 @@ interface OAWork {
   best_oa_location?: { pdf_url?: string | null; landing_page_url?: string | null } | null;
   abstract_inverted_index?: Record<string, number[]> | null;
   topics?: Array<{ display_name: string }> | null;
+  referenced_works?: string[] | null;
+  related_works?: string[] | null;
 }
 
 interface OAList<T> {
@@ -264,6 +266,42 @@ export const openAlex = {
     const params = new URLSearchParams();
     if (q) params.set("search", q);
     params.set("per-page", String(Math.min(perPage, 50)));
+    params.set("mailto", MAILTO);
+    const data = await getJson<OAList<OAWork>>(`${BASE}/works?${params.toString()}`);
+    return (data?.results ?? []).map(workToPaperDTO);
+  },
+
+  /** Single work with references and related work ids (for the detail page). */
+  async getWork(id: string): Promise<{ paper: PaperDTO; referenced: string[]; related: string[] } | null> {
+    if (!isOpenAlexId(id)) return null;
+    const w = await getJson<OAWork>(`${BASE}/works/${id}?mailto=${MAILTO}`);
+    if (!w) return null;
+    return {
+      paper: workToPaperDTO(w),
+      referenced: (w.referenced_works ?? []).map(shortId).filter(Boolean),
+      related: (w.related_works ?? []).map(shortId).filter(Boolean),
+    };
+  },
+
+  /** Batch-fetch works by OpenAlex ids (capped). */
+  async getWorksByIds(ids: string[]): Promise<PaperDTO[]> {
+    const capped = ids.slice(0, 20);
+    if (capped.length === 0) return [];
+    const params = new URLSearchParams();
+    params.set("filter", `ids.openalex:${capped.join("|")}`);
+    params.set("per-page", String(capped.length));
+    params.set("mailto", MAILTO);
+    const data = await getJson<OAList<OAWork>>(`${BASE}/works?${params.toString()}`);
+    return (data?.results ?? []).map(workToPaperDTO);
+  },
+
+  /** Works that cite the given work id, most-cited first. */
+  async citedBy(id: string, perPage = 10): Promise<PaperDTO[]> {
+    if (!isOpenAlexId(id)) return [];
+    const params = new URLSearchParams();
+    params.set("filter", `cites:${id}`);
+    params.set("sort", "cited_by_count:desc");
+    params.set("per-page", String(Math.min(perPage, 25)));
     params.set("mailto", MAILTO);
     const data = await getJson<OAList<OAWork>>(`${BASE}/works?${params.toString()}`);
     return (data?.results ?? []).map(workToPaperDTO);

@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { recommendationService } from "@/lib/services/recommendation-service";
+import { scimago } from "@/lib/providers/scimago";
 import { Badge } from "@/components/ui/badge";
+import { QuartileBadge } from "@/components/quartile-badge";
 import { SaveButton } from "./save-button";
 import type { RecommendationResultDTO } from "@/lib/dto";
 
@@ -78,6 +80,7 @@ export default async function RecommendationPage({
               const href = venuePath[it.venueType]
                 ? `/${venuePath[it.venueType]}/${it.venueId}`
                 : null;
+              const sj = /^\d+$/.test(it.venueId) ? scimago.getById(it.venueId) : null;
               return (
                 <li
                   key={it.id}
@@ -94,7 +97,12 @@ export default async function RecommendationPage({
                           it.venueName
                         )}
                       </span>
-                      <span className="text-xs text-[var(--muted-foreground)]">{it.venueType}</span>
+                      <span className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted-foreground)]">
+                        {it.venueType}
+                        {sj?.quartile && <QuartileBadge quartile={sj.quartile} />}
+                        {sj?.sjr != null && <span>SJR {sj.sjr}</span>}
+                        {sj?.hIndex != null && <span>· H-index {sj.hIndex}</span>}
+                      </span>
                     </div>
                     <span
                       className="shrink-0 rounded-full px-3 py-1 text-sm font-semibold text-white"

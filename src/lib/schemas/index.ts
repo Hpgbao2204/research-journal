@@ -94,6 +94,7 @@ export const AnalyzeRequestSchema = z.object({
   field: z.string().trim().optional(),
   preferredVenueType: VenueTypeSchema.optional(),
   preferredIndexing: z.array(z.string().trim().min(1)).max(20).default([]),
+  preferredQuartile: QuartileSchema.optional(),
   preferredDeadlineFrom: z.coerce.date().optional(),
   preferredDeadlineTo: z.coerce.date().optional(),
   openAccess: z.boolean().optional(),

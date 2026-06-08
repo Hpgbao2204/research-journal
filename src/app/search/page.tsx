@@ -6,6 +6,7 @@ import { Search as SearchIcon, SlidersHorizontal } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { DataSourceBadge } from "@/components/data-source-badge";
 import { JournalCard } from "@/components/journal-card";
+import { PaperCard } from "@/components/paper-card";
 import { MockDataNotice } from "@/components/mock-data-notice";
 import type { SearchResults } from "@/lib/dto";
 
@@ -269,12 +270,16 @@ function Results({ results }: { results: SearchResults }) {
       )}
 
       {results.papers.length > 0 && (
-        <Group title="Papers">
-          {results.papers.map((p) => (
-            <SimpleCard key={p.id} title={p.title}
-              subtitle={[p.authors, p.year ? String(p.year) : null].filter(Boolean).join(" · ")} badges={p.keywords.slice(0, 3)} ds={p.dataSource} unv={p.isUnverified} />
-          ))}
-        </Group>
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">Papers</h2>
+          <ul className="flex flex-col gap-3">
+            {results.papers.map((p) => (
+              <li key={p.id}>
+                <PaperCard paper={p} />
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
     </div>
   );

@@ -23,6 +23,7 @@ const FormSchema = z.object({
   field: z.string().optional(),
   preferredVenueType: z.enum(["", "JOURNAL", "CONFERENCE", "SPECIAL_ISSUE"]).optional(),
   preferredIndexing: z.string().optional(),
+  preferredQuartile: z.enum(["", "Q1", "Q2", "Q3", "Q4"]).optional(),
   openAccess: z.enum(["", "true", "false"]).optional(),
 });
 
@@ -61,6 +62,7 @@ export default function AnalyzePage() {
       field: values.field?.trim() || undefined,
       preferredVenueType: values.preferredVenueType || undefined,
       preferredIndexing: splitList(values.preferredIndexing),
+      preferredQuartile: values.preferredQuartile || undefined,
       openAccess:
         values.openAccess === "true" ? true : values.openAccess === "false" ? false : undefined,
     };
@@ -157,6 +159,19 @@ export default function AnalyzePage() {
               className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
               placeholder="Scopus, IEEE"
             />
+          </Field>
+
+          <Field label="Preferred quartile">
+            <select
+              {...register("preferredQuartile")}
+              className="w-full rounded-[var(--radius)] border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm"
+            >
+              <option value="">Any</option>
+              <option value="Q1">Q1</option>
+              <option value="Q2">Q2</option>
+              <option value="Q3">Q3</option>
+              <option value="Q4">Q4</option>
+            </select>
           </Field>
 
           <Field label="Open access preference">

@@ -15,20 +15,24 @@ import type { Candidate } from "./candidates";
  *   score = round(clamp(raw,0,1) * 100)
  */
 
-const W_KEYWORD = 0.45;
-const W_FIELD = 0.25;
-const W_DEADLINE = 0.15;
-const W_INDEXING = 0.15;
+const W_KEYWORD = 0.5;
+const W_FIELD = 0.15;
+const W_DEADLINE = 0.1;
+const W_INDEXING = 0.1;
+const W_QUARTILE = 0.15;
 
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
 }
+
+const QUARTILE_SCORE: Record<string, number> = { Q1: 1, Q2: 0.7, Q3: 0.4, Q4: 0.2 };
 
 export interface ScoreSignals {
   keywordOverlap: number;
   fieldMatch: number;
   deadlineAvail: number;
   indexingMatch: number;
+  quartileScore: number;
 }
 
 export function computeSignals(
@@ -62,7 +66,9 @@ export function computeSignals(
         ? 1
         : 0;
 
-  return { keywordOverlap, fieldMatch, deadlineAvail, indexingMatch };
+  const quartileScore = candidate.quartile ? (QUARTILE_SCORE[candidate.quartile] ?? 0) : 0;
+
+  return { keywordOverlap, fieldMatch, deadlineAvail, indexingMatch, quartileScore };
 }
 
 export function scoreFromSignals(s: ScoreSignals): number {
@@ -70,7 +76,8 @@ export function scoreFromSignals(s: ScoreSignals): number {
     W_KEYWORD * s.keywordOverlap +
     W_FIELD * s.fieldMatch +
     W_DEADLINE * s.deadlineAvail +
-    W_INDEXING * s.indexingMatch;
+    W_INDEXING * s.indexingMatch +
+    W_QUARTILE * s.quartileScore;
   return Math.round(clamp01(raw) * 100);
 }
 
@@ -113,11 +120,16 @@ export function ruleBasedAnalyze(
       c,
       now,
     );
+    let score = scoreFromSignals(signals);
+    // Bonus when the venue matches the author's preferred quartile.
+    if (request.preferredQuartile && c.quartile === request.preferredQuartile) {
+      score = Math.min(100, score + 8);
+    }
     return {
       venueType: c.venueType,
       venueId: c.id,
       venueName: c.name,
-      matchScore: scoreFromSignals(signals),
+      matchScore: score,
       reason: reasonFor(signals, c),
       scopeAlignment: c.scope ?? c.field ?? "Scope information unavailable.",
       submissionDeadline: c.submissionDeadline,

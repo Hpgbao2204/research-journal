@@ -22,6 +22,10 @@ export interface Candidate {
   submissionDeadline: Date | null;
   submissionUrl: string | null;
   isUnverified: boolean;
+  /** SJR quartile (Q1–Q4) when known — used for quartile-weighted scoring. */
+  quartile?: string | null;
+  sjr?: number | null;
+  hIndex?: number | null;
   /** Names of fields that are null/unverified (used to derive warnings). */
   missingFields: string[];
 }
@@ -65,6 +69,9 @@ export async function queryCandidates(request: AnalyzeRequest): Promise<Candidat
         submissionDeadline: null,
         submissionUrl: j.officialUrl,
         isUnverified: false,
+        quartile: j.quartile,
+        sjr: j.sjr,
+        hIndex: j.hIndex,
         missingFields: j.quartile ? [] : ["quartile"],
       });
     }
