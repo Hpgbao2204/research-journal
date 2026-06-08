@@ -11,6 +11,7 @@ import { aiClient } from "./recommendation/ai-client";
 import { queryCandidates, type Candidate } from "./recommendation/candidates";
 import { ruleBasedAnalyze } from "./recommendation/fallback";
 import { buildPrompt } from "./recommendation/prompt";
+import { semanticRerank } from "./recommendation/semantic";
 
 const AI_TIMEOUT_MS = Number(process.env.AI_TIMEOUT_MS ?? "20000");
 
@@ -178,7 +179,11 @@ export const recommendationService = {
       throw new AppError("Failed to produce a valid recommendation result", 500, "recommendation_error");
     }
 
-    const id = await persist(request, validated.data);
+    // Optional semantic re-ranking with embeddings (best-effort).
+    const reranked = await semanticRerank(request, candidates, validated.data.items);
+    const finalResult = { ...validated.data, items: reranked.items };
+
+    const id = await persist(request, finalResult);
     const dto = await this.getById(id);
     if (!dto) throw new AppError("Recommendation could not be retrieved after saving", 500, "recommendation_error");
     return dto;

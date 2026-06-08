@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { openAlex } from "@/lib/providers/openalex";
 import { PaperCard } from "@/components/paper-card";
+import { SummarizeButton } from "./summarize-button";
 import type { PaperDTO } from "@/lib/dto";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,8 @@ export default async function PaperDetailPage({ params }: { params: Promise<{ id
       </Link>
 
       <PaperCard paper={paper} />
+      <SummarizeButton title={paper.title} abstract={paper.abstract} />
+
 
       <Section title={`References (${references.length})`} papers={references}
         empty="No reference list available from OpenAlex." />
