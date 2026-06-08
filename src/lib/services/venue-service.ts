@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/http/errors";
+import { logger } from "@/lib/http/logger";
 import type { ConferenceDTO, JournalDTO, SpecialIssueDTO } from "@/lib/dto";
 import {
   toConferenceDTO,
@@ -10,16 +11,32 @@ import {
 } from "./mappers";
 
 /**
+ * Returns a fallback value (logging the error) when a database query fails so
+ * that list views degrade gracefully — e.g. when no database is configured yet
+ * during local preview — instead of crashing the page (Req 15.3).
+ */
+async function safeList<T>(operation: string, run: () => Promise<T[]>): Promise<T[]> {
+  try {
+    return await run();
+  } catch (err) {
+    logger.error(operation, err);
+    return [];
+  }
+}
+
+/**
  * Read-only list/detail access for the three venue types. Detail lookups throw
  * NotFoundError (mapped to 404) when an id does not exist.
  */
 export const venueService = {
   async listJournals(): Promise<JournalDTO[]> {
-    const rows = await prisma.journal.findMany({
-      include: venueInclude,
-      orderBy: { name: "asc" },
+    return safeList("venueService.listJournals", async () => {
+      const rows = await prisma.journal.findMany({
+        include: venueInclude,
+        orderBy: { name: "asc" },
+      });
+      return rows.map(toJournalDTO);
     });
-    return rows.map(toJournalDTO);
   },
 
   async getJournal(id: string): Promise<JournalDTO> {
@@ -29,11 +46,13 @@ export const venueService = {
   },
 
   async listConferences(): Promise<ConferenceDTO[]> {
-    const rows = await prisma.conference.findMany({
-      include: venueInclude,
-      orderBy: { name: "asc" },
+    return safeList("venueService.listConferences", async () => {
+      const rows = await prisma.conference.findMany({
+        include: venueInclude,
+        orderBy: { name: "asc" },
+      });
+      return rows.map(toConferenceDTO);
     });
-    return rows.map(toConferenceDTO);
   },
 
   async getConference(id: string): Promise<ConferenceDTO> {
@@ -43,11 +62,13 @@ export const venueService = {
   },
 
   async listSpecialIssues(): Promise<SpecialIssueDTO[]> {
-    const rows = await prisma.specialIssue.findMany({
-      include: specialIssueInclude,
-      orderBy: { title: "asc" },
+    return safeList("venueService.listSpecialIssues", async () => {
+      const rows = await prisma.specialIssue.findMany({
+        include: specialIssueInclude,
+        orderBy: { title: "asc" },
+      });
+      return rows.map(toSpecialIssueDTO);
     });
-    return rows.map(toSpecialIssueDTO);
   },
 
   async getSpecialIssue(id: string): Promise<SpecialIssueDTO> {
