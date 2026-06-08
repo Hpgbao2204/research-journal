@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db/prisma";
 import { NotFoundError } from "@/lib/http/errors";
 import { logger } from "@/lib/http/logger";
+import { openAlex } from "@/lib/providers/openalex";
 import type { ConferenceDTO, JournalDTO, SpecialIssueDTO } from "@/lib/dto";
 import {
   toConferenceDTO,
@@ -30,16 +31,19 @@ async function safeList<T>(operation: string, run: () => Promise<T[]>): Promise<
  */
 export const venueService = {
   async listJournals(): Promise<JournalDTO[]> {
-    return safeList("venueService.listJournals", async () => {
-      const rows = await prisma.journal.findMany({
-        include: venueInclude,
-        orderBy: { name: "asc" },
-      });
-      return rows.map(toJournalDTO);
-    });
+    // Live from OpenAlex: a broad listing of high-output journals.
+    return safeList("venueService.listJournals", () =>
+      openAlex.searchJournals({ perPage: 30 }),
+    );
   },
 
   async getJournal(id: string): Promise<JournalDTO> {
+    // OpenAlex ids (S####) resolve live; other ids fall back to the DB cache.
+    if (openAlex.isOpenAlexId(id)) {
+      const j = await openAlex.getJournal(id);
+      if (!j) throw new NotFoundError(`Journal ${id} not found`);
+      return j;
+    }
     const row = await prisma.journal.findUnique({ where: { id }, include: venueInclude });
     if (!row) throw new NotFoundError(`Journal ${id} not found`);
     return toJournalDTO(row);

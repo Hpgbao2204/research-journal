@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/prisma";
+import { openAlex } from "@/lib/providers/openalex";
 import type { AnalyzeRequest, VenueType } from "@/lib/schemas";
 
 /**
@@ -37,25 +38,35 @@ export async function queryCandidates(request: AnalyzeRequest): Promise<Candidat
   const candidates: Candidate[] = [];
 
   if (want("JOURNAL")) {
-    const rows = await prisma.journal.findMany({
-      include: { field: true, keywords: true },
-    });
-    for (const j of rows) {
-      candidates.push({
-        venueType: "JOURNAL",
-        id: j.id,
-        name: j.name,
-        field: j.field?.name ?? null,
-        scope: j.scope,
-        keywords: j.keywords.map((k) => k.term),
-        indexing: j.indexing,
-        submissionDeadline: j.submissionDeadline,
-        submissionUrl: j.submissionUrl,
-        isUnverified: j.verificationStatus === "UNVERIFIED_MOCK",
-        missingFields: missing(j as unknown as Record<string, unknown>, [
-          "publisher", "issn", "quartile", "impactFactor", "apc", "submissionDeadline",
-        ]),
+    // Live candidate journals from OpenAlex, matched to the paper's topic.
+    const query = [request.field, ...request.keywords].filter(Boolean).join(" ") ||
+      request.title;
+    try {
+      const journals = await openAlex.searchJournals({
+        q: query,
+        openAccess: request.openAccess,
+        perPage: 25,
       });
+      for (const j of journals) {
+        candidates.push({
+          venueType: "JOURNAL",
+          id: j.id,
+          name: j.name,
+          field: j.field,
+          scope: j.scope,
+          keywords: j.keywords,
+          indexing: j.indexing,
+          submissionDeadline: null,
+          submissionUrl: j.officialUrl,
+          isUnverified: false,
+          missingFields: [
+            ...(j.quartile ? [] : ["quartile"]),
+            ...(j.apc == null ? ["apc"] : []),
+          ],
+        });
+      }
+    } catch {
+      // If OpenAlex is unavailable, journals are simply omitted from candidates.
     }
   }
 
